@@ -638,6 +638,10 @@ ul, ol { padding: 0; list-style: none; }
   text-transform: uppercase;
   color: var(--muted);
 }
+/* sur ordinateur : le long de la grande photo, sous le nom */
+@media (min-width: 961px) {
+  .hero__collage figcaption { left: auto; right: calc(65% + .9rem); top: 27%; }
+}
 
 /* ---------- 7. Photographies ---------- */
 .ph {
