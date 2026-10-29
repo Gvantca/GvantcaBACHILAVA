@@ -58,6 +58,73 @@
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const root = document.documentElement;
 
+  /* =============================================================
+     LANGUES : français (texte d'origine de la page), anglais, géorgien
+     Les traductions sont dans translations.js
+     ============================================================= */
+  const LANGS = ['fr', 'en', 'ka'];
+  const DICT = window.I18N || {};
+  let LANG = LANGS.includes(root.lang) ? root.lang : 'fr';
+  const langHooks = [];
+  const onLang = (fn) => langHooks.push(fn);
+
+  function t(key, vars, fallback) {
+    let str = (DICT[LANG] && DICT[LANG][key]) ?? (DICT.fr && DICT.fr[key]) ?? fallback ?? key;
+    if (vars) str = str.replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? vars[k] : ''));
+    return str;
+  }
+
+  /* le français d'origine est lu une fois dans la page */
+  const textEls = $$('[data-i18n]');
+  const attrEls = $$('[data-i18n-attr]');
+  const originalHtml = new Map(textEls.map((el) => [el, el.innerHTML]));
+  const attrPairs = (el) => el.dataset.i18nAttr.split(',').map((pair) => pair.split(':').map((x) => x.trim()));
+  const originalAttrs = new Map(attrEls.map((el) => [el, Object.fromEntries(attrPairs(el).map(([name]) => [name, el.getAttribute(name)]))]));
+  const metaDesc = $('meta[name="description"]');
+  const originalTitle = document.title;
+  const originalDesc = metaDesc ? metaDesc.content : '';
+
+  function translatePage() {
+    const dict = LANG === 'fr' ? {} : (DICT[LANG] || {});
+    textEls.forEach((el) => {
+      const v = dict[el.dataset.i18n];
+      el.innerHTML = v != null ? v : originalHtml.get(el);
+    });
+    attrEls.forEach((el) => {
+      const saved = originalAttrs.get(el);
+      attrPairs(el).forEach(([name, key]) => el.setAttribute(name, dict[key] != null ? dict[key] : saved[name]));
+    });
+    $$('[data-page-label]').forEach((el) => { el.textContent = t('js.p') + ' ' + el.dataset.pageLabel; });
+    $$('[data-pages]').forEach((el) => { el.textContent = el.dataset.pages + ' ' + t('js.pp'); });
+    document.title = dict['meta.title'] || originalTitle;
+    if (metaDesc) metaDesc.content = dict['meta.description'] || originalDesc;
+  }
+
+  const switcher = $('.lang');
+  const langBtns = $$('.lang__opt');
+  function setLang(lang, initial = false) {
+    if (!LANGS.includes(lang)) lang = 'fr';
+    if (lang === LANG && !initial) return;
+    LANG = lang;
+    root.lang = lang;
+    translatePage();
+    langBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
+    if (switcher) switcher.style.setProperty('--i', String(LANGS.indexOf(lang)));
+    if (initial) return;
+    try { localStorage.setItem('gb-lang', lang); } catch (e) { /* navigation privée */ }
+    const url = new URL(location.href);
+    if (lang === 'fr') url.searchParams.delete('lang');
+    else url.searchParams.set('lang', lang);
+    history.replaceState(history.state, '', url);
+    langHooks.forEach((fn) => fn(lang));
+    if (!reduceMotion.matches) {
+      $('#main').animate([{ opacity: 0.15, filter: 'blur(2px)' }, { opacity: 1, filter: 'blur(0)' }], { duration: 550, easing: 'cubic-bezier(.16, 1, .3, 1)' });
+    }
+  }
+  langBtns.forEach((b) => b.addEventListener('click', () => setLang(b.dataset.lang)));
+  setLang(LANG, true);
+  root.classList.remove('i18n-wait');
+
   /* ---------- Entrée en scène ---------- */
   const fontsReady = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
   Promise.race([fontsReady, new Promise((r) => setTimeout(r, 1200))]).then(() => {
@@ -183,6 +250,8 @@
   const email = (Array.isArray(CONTACT.email) ? CONTACT.email.filter(Boolean).join('@') : String(CONTACT.email || '')).trim();
   const phone = String(CONTACT.phone || '').trim();
   const phoneIntl = phone ? '+33' + phone.replace(/\D/g, '').replace(/^0/, '') : '';
+  /* numéro au format international hors de la version française */
+  const phoneShown = () => (LANG === 'fr' || !phoneIntl ? phone : '+33 ' + phoneIntl.slice(3).replace(/^(\d)(\d{2})(\d{2})(\d{2})(\d{2})$/, '$1 $2 $3 $4 $5'));
   const linkedin = String(CONTACT.linkedin || '').trim();
   const formKey = String(CONTACT.formKey || '').trim();
 
@@ -197,7 +266,8 @@
       line.hidden = false;
     };
     fill('email', email && 'mailto:' + email, email);
-    fill('phone', phoneIntl && 'tel:' + phoneIntl, phone);
+    fill('phone', phoneIntl && 'tel:' + phoneIntl, phoneShown());
+    onLang(() => { if (phoneIntl) $('[data-card="phone"] a', card).textContent = phoneShown(); });
     fill('linkedin', linkedin, linkedin.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''));
 
     /* copier l'adresse */
@@ -213,10 +283,10 @@
         document.execCommand('copy');
         tmp.remove();
       }
-      copyBtn.textContent = 'Copié';
+      copyBtn.textContent = t('js.copied');
       copyBtn.classList.add('is-done');
       setTimeout(() => {
-        copyBtn.textContent = 'Copier';
+        copyBtn.textContent = t('card.copy');
         copyBtn.classList.remove('is-done');
       }, 1800);
     });
@@ -252,7 +322,7 @@
         'VERSION:3.0',
         'N:Bachilava;Gvantca;;;',
         'FN:Gvantca Bachilava',
-        'TITLE:Étudiante en Master 2 Anthropologie - Ethnologie',
+        'TITLE:' + t('js.vcardTitle'),
         'ORG:Université Côte d\'Azur',
         'ADR;TYPE=WORK:;;;Nice;;;France',
       ];
@@ -355,33 +425,33 @@
     /* ---- 1. contrôle des champs ---- */
     function checkName() {
       const v = oneLine(inputs.name.value);
-      if (!v) return 'Indiquez votre nom.';
-      if (v.length < LIMITS.name[0]) return 'Votre nom semble trop court.';
-      if (v.length > LIMITS.name[1]) return 'Votre nom est trop long (' + LIMITS.name[1] + ' caractères maximum).';
-      if (!NAME_RE.test(v)) return 'Indiquez votre nom en lettres, sans chiffres ni liens.';
+      if (!v) return t('err.name.empty');
+      if (v.length < LIMITS.name[0]) return t('err.name.short');
+      if (v.length > LIMITS.name[1]) return t('err.name.long', { n: LIMITS.name[1] });
+      if (!NAME_RE.test(v)) return t('err.name.invalid');
       return '';
     }
     function checkEmail() {
       const v = clean(inputs.email.value).toLowerCase();
-      if (!v) return 'Indiquez votre adresse e-mail.';
-      if (v.length > 160 || !EMAIL_RE.test(v) || v.includes('..')) return 'Cette adresse e-mail semble incomplète.';
-      if (DISPOSABLE.includes(v.split('@')[1])) return 'Merci d’utiliser une adresse e-mail permanente pour recevoir la réponse.';
+      if (!v) return t('err.email.empty');
+      if (v.length > 160 || !EMAIL_RE.test(v) || v.includes('..')) return t('err.email.invalid');
+      if (DISPOSABLE.includes(v.split('@')[1])) return t('err.email.disposable');
       return '';
     }
     function checkSubject() {
       const v = oneLine(inputs.subject.value);
-      if (v.length > LIMITS.subject) return 'L’objet est trop long (' + LIMITS.subject + ' caractères maximum).';
-      if (countLinks(v) || HTML_RE.test(v)) return 'L’objet ne peut pas contenir de lien ni de code.';
+      if (v.length > LIMITS.subject) return t('err.subject.long', { n: LIMITS.subject });
+      if (countLinks(v) || HTML_RE.test(v)) return t('err.subject.links');
       return '';
     }
     function checkMessage() {
       const v = clean(inputs.message.value);
-      if (!v) return 'Écrivez votre message.';
-      if (v.length < LIMITS.message[0]) return 'Votre message est un peu court (' + LIMITS.message[0] + ' caractères minimum).';
-      if (v.length > LIMITS.message[1]) return 'Votre message est trop long (' + LIMITS.message[1] + ' caractères maximum).';
-      if (HTML_RE.test(v)) return 'Le message ne peut pas contenir de code HTML.';
-      if (countLinks(v) > LIMITS.links) return 'Deux liens au maximum par message.';
-      if (/(.)\1{11,}/.test(v)) return 'Le message contient des répétitions inhabituelles.';
+      if (!v) return t('err.msg.empty');
+      if (v.length < LIMITS.message[0]) return t('err.msg.short', { n: LIMITS.message[0] });
+      if (v.length > LIMITS.message[1]) return t('err.msg.long', { n: LIMITS.message[1] });
+      if (HTML_RE.test(v)) return t('err.msg.html');
+      if (countLinks(v) > LIMITS.links) return t('err.msg.links');
+      if (/(.)\1{11,}/.test(v)) return t('err.msg.repeat');
       return '';
     }
     function validate() {
@@ -401,7 +471,7 @@
       captchaPromise = new Promise((resolve, reject) => {
         window.__gbCaptchaReady = () => resolve(window.hcaptcha);
         const script = document.createElement('script');
-        script.src = 'https://js.hcaptcha.com/1/api.js?render=explicit&recaptchacompat=off&hl=fr&onload=__gbCaptchaReady';
+        script.src = 'https://js.hcaptcha.com/1/api.js?render=explicit&recaptchacompat=off&hl=' + LANG + '&onload=__gbCaptchaReady';
         script.async = true;
         script.onerror = () => reject(new Error('hCaptcha indisponible'));
         document.head.append(script);
@@ -411,7 +481,7 @@
           theme: 'dark',
           size: captchaBox.clientWidth && captchaBox.clientWidth < 304 ? 'compact' : 'normal',
           callback: () => { $('#cf-captcha-error').textContent = ''; },
-          'expired-callback': () => { $('#cf-captcha-error').textContent = 'La vérification a expiré, cochez à nouveau la case.'; },
+          'expired-callback': () => { $('#cf-captcha-error').textContent = t('err.captchaExpired'); },
         });
         return hc;
       }).catch((err) => {
@@ -477,7 +547,14 @@
       inputs.name.focus();
     });
 
-    const fallbackText = email ? ' ou écrivez directement à ' + email : '';
+    const fallback = () => (email ? t('st.fallback', { email }) : '');
+
+    /* changement de langue : messages du formulaire dans la nouvelle langue */
+    onLang(() => {
+      setStatus('');
+      $('#cf-captcha-error').textContent = '';
+      if (tried) validate();
+    });
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -487,7 +564,7 @@
       $('#cf-captcha-error').textContent = '';
 
       if (!validate()) {
-        setStatus('Merci de corriger les champs indiqués.', true);
+        setStatus(t('st.fix'), true);
         const firstInvalid = Object.values(inputs).find((i) => i.getAttribute('aria-invalid') === 'true');
         if (firstInvalid) firstInvalid.focus();
         return;
@@ -508,7 +585,7 @@
 
       /* mots typiques des spams */
       if (SPAM_WORDS.test(data.subject + ' ' + data.message)) {
-        setStatus('Ce message a été bloqué par le filtre anti-spam. Reformulez-le' + fallbackText + '.', true);
+        setStatus(t('st.spam', { fallback: fallback() }), true);
         return;
       }
 
@@ -518,16 +595,16 @@
       const last = history[history.length - 1];
       const fingerprint = hash(data.email + '|' + data.message);
       if (history.some((h) => h.h === fingerprint)) {
-        setStatus('Ce message a déjà été envoyé. Gvantca vous répondra par e-mail.', true);
+        setStatus(t('st.dup'), true);
         return;
       }
       if (last && now - last.t < COOLDOWN_MS) {
         const wait = Math.ceil((COOLDOWN_MS - (now - last.t)) / 1000);
-        setStatus('Votre précédent message vient de partir. Patientez ' + wait + ' s avant d’en envoyer un autre.', true);
+        setStatus(t('st.cooldown', { s: wait }), true);
         return;
       }
       if (history.length >= MAX_PER_DAY) {
-        setStatus('Vous avez déjà envoyé plusieurs messages aujourd’hui. Merci de réessayer demain' + fallbackText + '.', true);
+        setStatus(t('st.daily', { fallback: fallback() }), true);
         return;
       }
 
@@ -538,9 +615,9 @@
           location.href = 'mailto:' + email
             + '?subject=' + encodeURIComponent(data.subject || 'Message depuis le portfolio')
             + '&body=' + encodeURIComponent(body);
-          setStatus('Votre messagerie s’ouvre avec le message prêt à partir.');
+          setStatus(t('st.mailto'));
         } else {
-          setStatus('Le formulaire n’est pas encore relié à une adresse e-mail.', true);
+          setStatus(t('st.unlinked'), true);
         }
         return;
       }
@@ -549,20 +626,20 @@
       try {
         await loadCaptcha();
       } catch (err) {
-        setStatus('La vérification anti-robot n’a pas pu se charger (bloqueur de publicités ?). Réessayez' + fallbackText + '.', true);
+        setStatus(t('st.captchaFail', { fallback: fallback() }), true);
         return;
       }
       const token = captchaToken();
       if (!token) {
-        $('#cf-captcha-error').textContent = 'Cochez la case « Je suis humain » pour envoyer votre message.';
-        setStatus('Une dernière vérification avant l’envoi.', true);
+        $('#cf-captcha-error').textContent = t('err.captcha');
+        setStatus(t('st.lastCheck'), true);
         return;
       }
 
       sending = true;
       form.classList.add('is-sending');
       submitBtn.disabled = true;
-      setStatus('Envoi en cours…');
+      setStatus(t('st.sending'));
 
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 15000);
@@ -578,6 +655,7 @@
             name: data.name,
             email: data.email,
             objet: data.subject || '—',
+            langue: { fr: 'français', en: 'anglais', ka: 'géorgien' }[LANG],
             message: data.message,
             'h-captcha-response': token,
           }),
@@ -590,7 +668,7 @@
         showDone();
       } catch (err) {
         console.error('[contact]', err);
-        setStatus('L’envoi n’a pas abouti. Réessayez dans un instant' + fallbackText + '.', true);
+        setStatus(t('st.error', { fallback: fallback() }), true);
       } finally {
         clearTimeout(timer);
         resetCaptcha();
@@ -666,6 +744,21 @@
       return libPromise;
     }
 
+    function setDocInfo(id) {
+      const doc = DOCS[id];
+      ui.kicker.textContent = t('doc.' + id + '.kicker', null, doc.kicker);
+      ui.title.textContent = t('doc.' + id + '.title', null, doc.title);
+    }
+
+    /* changement de langue pendant la lecture */
+    onLang(() => {
+      if (!S.id) return;
+      setDocInfo(S.id);
+      updateUI();
+      if (!ui.error.hidden) showError();
+      $$('canvas[data-page]', el).forEach((c) => c.setAttribute('aria-label', t('js.page') + ' ' + c.dataset.page));
+    });
+
     /* ---- ouverture / fermeture ---- */
     async function open(id, page = 1, opener = null, fromHistory = false) {
       const doc = DOCS[id];
@@ -681,8 +774,7 @@
         outside.forEach((n) => { n.inert = true; });
       }
 
-      ui.kicker.textContent = doc.kicker;
-      ui.title.textContent = doc.title;
+      setDocInfo(id);
       ui.download.href = doc.file;
       ui.download.setAttribute('download', doc.file.split('/').pop());
       ui.errorLink.href = doc.file;
@@ -820,7 +912,8 @@
         canvas.style.width = cssW + 'px';
         canvas.style.height = cssH + 'px';
         canvas.setAttribute('role', 'img');
-        canvas.setAttribute('aria-label', 'Page ' + n);
+        canvas.setAttribute('aria-label', t('js.page') + ' ' + n);
+        canvas.dataset.page = n;
 
         const ctx = canvas.getContext('2d', { alpha: false });
         ctx.fillStyle = '#ffffff';
@@ -1105,7 +1198,7 @@
       ui.range.max = n;
       ui.range.value = S.page;
       ui.range.style.setProperty('--p', (n > 1 ? ((S.page - 1) / (n - 1)) * 100 : 100) + '%');
-      ui.range.setAttribute('aria-valuetext', 'Page ' + label + ' sur ' + n);
+      ui.range.setAttribute('aria-valuetext', t('js.pageOf', { label, n }));
       ui.prev.setAttribute('aria-disabled', String(neighbor(-1) == null));
       ui.next.setAttribute('aria-disabled', String(neighbor(1) == null));
 
@@ -1133,8 +1226,8 @@
     function showError() {
       ui.error.hidden = false;
       ui.errorText.textContent = location.protocol === 'file:'
-        ? 'Ouvert directement depuis l’ordinateur, le navigateur bloque la lecture des PDF. Une fois le site en ligne (GitHub Pages) ou lancé avec un petit serveur local, la liseuse fonctionne.'
-        : 'Vérifiez la connexion internet, puis réessayez. Le document reste disponible en PDF.';
+        ? t('js.readerFile')
+        : t('js.readerNet');
     }
 
     function zoom(step) {

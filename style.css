@@ -25,9 +25,10 @@
   --cream-dim: rgba(239, 231, 218, .68);
   --line-dark: rgba(239, 231, 218, .16);
 
-  --f-display: "Bodoni Moda", "Bodoni 72", Didot, "Times New Roman", serif;
-  --f-serif: "Cormorant Garamond", Garamond, Georgia, serif;
-  --f-sans: "Jost", "Helvetica Neue", Arial, sans-serif;
+  /* les polices géorgiennes prennent le relais pour les lettres géorgiennes */
+  --f-display: "Bodoni Moda", "Noto Serif Georgian", "Bodoni 72", Didot, "Times New Roman", serif;
+  --f-serif: "Cormorant Garamond", "Noto Serif Georgian", Garamond, Georgia, serif;
+  --f-sans: "Jost", "Noto Sans Georgian", "Helvetica Neue", Arial, sans-serif;
   --f-ka: "Noto Serif Georgian", Sylfaen, serif;
 
   --gutter: clamp(16px, 4.2vw, 64px);
@@ -48,6 +49,8 @@ html {
   scroll-padding-top: var(--nav-h);
 }
 html.is-locked, html.is-locked body { overflow: hidden; }
+html.i18n-wait body { visibility: hidden; animation: i18n-reveal 0s linear 1.5s forwards; }
+@keyframes i18n-reveal { to { visibility: visible; } }
 
 body {
   margin: 0;
@@ -371,6 +374,62 @@ ul, ol { padding: 0; list-style: none; }
 }
 .nav__burger[aria-expanded="true"] .nav__burger-lines i:first-child { transform: translateY(3px) rotate(45deg); }
 .nav__burger[aria-expanded="true"] .nav__burger-lines i:last-child { transform: translateY(-3px) rotate(-45deg); }
+
+/* ---- sélecteur de langue ---- */
+.lang {
+  --w: 2.6rem;
+  position: relative;
+  isolation: isolate;
+  flex-shrink: 0;
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: var(--w);
+  height: 40px;
+  padding: 3px;
+  border: 1px solid rgba(22, 19, 15, .22);
+  border-radius: 999px;
+  transition: border-color .5s var(--ease);
+}
+.nav[data-theme="dark"] .lang,
+.nav--menu .lang { border-color: rgba(239, 231, 218, .3); }
+.lang__opt {
+  position: relative;
+  z-index: 1;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font-family: var(--f-sans);
+  font-size: .6rem;
+  letter-spacing: .14em;
+  line-height: 1;
+  cursor: pointer;
+  opacity: .55;
+  transition: opacity .4s var(--ease);
+}
+.lang__opt[lang="ka"] { font-family: var(--f-ka); font-size: .74rem; font-weight: 400; letter-spacing: 0; }
+.lang__opt:hover,
+.lang__opt[aria-pressed="true"] { opacity: 1; }
+.lang__opt:focus-visible { outline: 1px solid currentColor; outline-offset: -4px; }
+.lang__glider {
+  position: absolute;
+  z-index: 0;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: var(--w);
+  border-radius: 999px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, .8), rgba(255, 255, 255, .32));
+  box-shadow: inset 0 1px 0 #fff, 0 6px 14px -8px rgba(22, 19, 15, .55);
+  transform: translateX(calc(var(--i, 0) * 100%));
+  transition: transform .7s var(--ease-out), background .5s var(--ease), box-shadow .5s var(--ease);
+}
+.nav[data-theme="dark"] .lang__glider,
+.nav--menu .lang__glider {
+  background: linear-gradient(160deg, rgba(255, 255, 255, .26), rgba(255, 255, 255, .06));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 6px 14px -8px rgba(0, 0, 0, .85);
+}
 
 .menu {
   position: fixed;
@@ -774,6 +833,8 @@ ul, ol { padding: 0; list-style: none; }
   color: var(--cream-dim);
 }
 .meta dd { margin-top: .3rem; font-family: var(--f-display); font-size: 1.02rem; line-height: 1.3; }
+.lang-note { margin: -1rem 0 2rem; font-style: italic; color: var(--gold-soft); }
+.lang-note:empty { display: none; }
 
 .toc { margin-top: clamp(4.5rem, 9vw, 8rem); }
 .toc__list { margin-top: 1.4rem; border-top: 1px solid var(--cream-dim); }
@@ -1443,6 +1504,12 @@ a.card__value:hover, a.card__value:focus-visible { background-size: 100% 1px; }
   outline: none;
 }
 .card__copy.is-done { border-color: #a07a43; color: #7a5a2c; }
+/* carte étroite : l'intitulé passe au-dessus de la valeur */
+@container (max-width: 460px) {
+  .card__lines { gap: .55rem; }
+  .card__lines li { grid-template-columns: minmax(0, 1fr) auto; row-gap: .1rem; }
+  .card__label { grid-column: 1 / -1; }
+}
 
 /* ---- formulaire en verre ---- */
 .contact-form {
@@ -1944,8 +2011,10 @@ button.link-arrow { border: 0; color: inherit; cursor: pointer; }
 /* ---------- 18. Responsive ---------- */
 @media (max-width: 960px) {
   :root { --nav-h: 64px; }
+  .nav { gap: .7rem; }
   .nav__links, .nav__cta { display: none; }
-  .nav__burger { display: inline-flex; }
+  .nav__burger { display: inline-flex; margin-left: 0; }
+  .lang { margin-left: auto; }
 
   .hero__inner { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
   .hero__name, .swirl--hero, .hero__lead, .hero__collage { grid-column: 1; grid-row: auto; }
@@ -2002,9 +2071,6 @@ button.link-arrow { border: 0; color: inherit; cursor: pointer; }
   .shelf { grid-auto-columns: 64%; }
   .footer__inner { justify-content: center; text-align: center; }
   .field-row { grid-template-columns: minmax(0, 1fr); }
-  .card__lines { gap: .55rem; }
-  .card__lines li { grid-template-columns: minmax(0, 1fr) auto; row-gap: .1rem; }
-  .card__label { grid-column: 1 / -1; }
 
   .reader__kicker, .reader__zoom, .reader__hint, [data-act="mode"] { display: none; }
   .reader__tools { gap: .3rem; }
@@ -2027,6 +2093,62 @@ button.link-arrow { border: 0; color: inherit; cursor: pointer; }
 @media (hover: none) {
   .cover__cta { display: none; }
 }
+
+@media (max-width: 400px) {
+  .nav__burger-label { display: none; }
+  .nav__burger { padding: .6em .9em; }
+  .lang { --w: 2.35rem; }
+}
+
+/* ---------- 19. Version géorgienne ----------
+   Le géorgien n'a ni majuscules ni italique : pas de capitales forcées,
+   pas de faux italique, tailles et interlignes ajustés. */
+html:lang(ka) body {
+  font-synthesis: none;
+  font-weight: 400;
+  font-size: clamp(1rem, .95rem + .25vw, 1.14rem);
+  line-height: 1.75;
+}
+html:lang(ka) :is(.kicker, .btn, .link-arrow, .nav__links a, .nav__burger, .hero__bar, .meta dt, .project__meta,
+  .badge, .tags li, .timeline__place, .skills__list li, .edito__facts dt, .field__label, .reader__kicker,
+  .toc__page, .footer__inner, .plate__label, .research__caption, .contact-form__privacy, .skills__certs span,
+  .reader__hint, .marquee span) {
+  text-transform: none;
+  letter-spacing: .03em;
+  font-size: .76rem;
+}
+html:lang(ka) :is(.cover__top, .cover__foot, .card__label, .card__copy, .card__org, .cover__cta,
+  .hero__collage figcaption, .btn--sm) {
+  text-transform: none;
+  letter-spacing: .02em;
+  font-size: .66rem;
+}
+html:lang(ka) .marquee span { font-size: clamp(1.05rem, .9rem + 1vw, 1.7rem); }
+html:lang(ka) .project__num { font-size: 2.6rem; }
+html:lang(ka) :is(.display, .edito__quote, .project__title, .contact__title, .timeline__body h3, .cover__title,
+  .hero__role, .contact-form__title, .menu__links a, .plate__word, .reader__title, .contact-form__thanks,
+  .cover__mark, .research__subtitle, .card__role, .toc__title, .skills__certs strong, .meta dd) {
+  font-weight: 300;
+  letter-spacing: 0;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+html:lang(ka) .display { font-size: clamp(2rem, 1.3rem + 3vw, 4.2rem); }
+html:lang(ka) .research__text .display { font-size: clamp(1.6rem, 1rem + 2vw, 2.9rem); }
+html:lang(ka) .edito__quote { font-size: clamp(1.5rem, 1.05rem + 2.1vw, 3rem); line-height: 1.4; }
+html:lang(ka) .project__title { font-size: clamp(1.6rem, 1.15rem + 1.7vw, 2.7rem); }
+html:lang(ka) .contact__title { font-size: clamp(2.2rem, 1.3rem + 4.6vw, 5.6rem); line-height: 1.15; }
+html:lang(ka) .plate__word { font-size: clamp(1.6rem, 1rem + 2vw, 3rem); }
+html:lang(ka) .plate__word--small { font-size: clamp(1.1rem, .9rem + .8vw, 1.6rem); }
+html:lang(ka) .cover__title { font-size: clamp(.82rem, .72rem + .3vw, 1.02rem); }
+html:lang(ka) .cover__mark { font-size: clamp(1.1rem, .8rem + .8vw, 1.6rem); }
+html:lang(ka) .hero__role { font-size: clamp(1.3rem, .95rem + 1.1vw, 1.9rem); }
+html:lang(ka) .timeline__body h3 { font-size: clamp(1.25rem, 1rem + .9vw, 1.8rem); }
+html:lang(ka) .menu__links a { font-size: clamp(1.6rem, 7vw, 2.5rem); }
+html:lang(ka) .research__subtitle { font-size: 1.2em; }
+html:lang(ka) .dropcap::first-letter { font-size: 3.4em; font-weight: 300; }
+html:lang(ka) .nav__links { gap: clamp(.9rem, 1.6vw, 1.8rem); }
+html:lang(ka) .nav__links a { font-size: .74rem; }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
